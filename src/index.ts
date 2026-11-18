@@ -8,9 +8,16 @@ const container = document.getElementById('scene-container') as HTMLDivElement;
 World.create(container, {
   features: { grabbing: true },
 }).then((world) => {
+  const paperMat = new MeshStandardMaterial({
+    color: 0xfdfbf7,
+    side: 2,
+    roughness: 0.85,
+    vertexColors: true,
+  });
+
   const paperMesh = new Mesh(
     new PlaneGeometry(0.4, 0.3, 20, 24),
-    new MeshStandardMaterial({ color: 0xfdfbf7, side: 2, roughness: 0.85 })
+    paperMat
   );
   const paperEntity = world.createTransformEntity(paperMesh);
   paperEntity.object3D!.position.set(0, 1.2, -0.6);

@@ -1,5 +1,5 @@
 import { createSystem, Transform, OneHandGrabbable } from '@iwsdk/core';
-import { Vector3, Mesh, BufferAttribute, BufferGeometry, MeshStandardMaterial, DoubleSide } from 'three';
+import { Vector3, Mesh, BufferAttribute, BufferGeometry, MeshStandardMaterial, DoubleSide, Color } from 'three';
 import { TearablePaper, TearHandle } from '../components.js';
 import { ProceduralRipAudio } from '../audio/ProceduralRipAudio.js';
 
@@ -61,6 +61,18 @@ export class PaperTearSystem extends createSystem({
       if (targetProgress > this.tearProgress) {
         const deltaRip = targetProgress - this.tearProgress;
         this.tearProgress = targetProgress;
+
+        // Haptic ticks on new torn rows
+        const newRows = Math.floor(this.tearProgress * this.rows) - Math.floor((this.tearProgress - deltaRip) * this.rows);
+        if (newRows > 0 && typeof navigator !== 'undefined') {
+          const intensity = Math.min(0.25 + pullVelocity * 0.15, 0.6);
+          navigator.getGamepads().forEach(gp => {
+            if (gp?.hapticActuators?.[0]) {
+              gp.hapticActuators[0].pulse(intensity, 18);
+            }
+          });
+        }
+
         this.ripAudio.updateRip(pullVelocity, deltaRip);
         this.rebuildSplitGeometry(geo, posAttr, this.tearProgress);
       } else {
@@ -80,44 +92,64 @@ export class PaperTearSystem extends createSystem({
 
     const splitRowLimit = Math.floor(progress * this.rows);
     const centerCol = Math.floor(this.cols / 2);
+    const vertsPerRow = this.cols + 1;
+
+    // Build new position + color (alpha proxy) arrays with duplicated seam
+    const newPositions: number[] = [];
+    const newColors: number[] = [];
 
     for (let r = 0; r <= this.rows; r++) {
       const isRowTorn = r <= splitRowLimit;
       const rowCurl = isRowTorn ? (1 - r / Math.max(splitRowLimit, 1)) * 0.08 : 0;
 
       for (let c = 0; c <= this.cols; c++) {
-        const idx = (r * (this.cols + 1) + c) * 3;
-        const bx = this.basePositions[idx];
-        const by = this.basePositions[idx + 1];
-        const bz = this.basePositions[idx + 2];
+        const srcIdx = (r * vertsPerRow + c) * 3;
+        const bx = this.basePositions[srcIdx];
+        const by = this.basePositions[srcIdx + 1];
+        const bz = this.basePositions[srcIdx + 2];
 
-        const isLeftHalf = c <= centerCol;
-        const seamShift = c === centerCol ? this.jaggedOffsets[r] : 0;
+        const isLeftHalf = c < centerCol;
+        const isSeam = c === centerCol;
 
-        if (isRowTorn) {
-          const sideSign = isLeftHalf ? -1 : 1;
-          posAttr.setXYZ(
-            r * (this.cols + 1) + c,
-            bx + seamShift + sideSign * rowCurl * 0.6,
+        if (isSeam && isRowTorn) {
+          // Duplicate seam vertex for left and right ownership
+          newPositions.push(
+            bx + this.jaggedOffsets[r] - rowCurl * 0.3,
             by - rowCurl * 0.25,
             bz + rowCurl
           );
+          newPositions.push(
+            bx + this.jaggedOffsets[r] + rowCurl * 0.3,
+            by - rowCurl * 0.25,
+            bz + rowCurl
+          );
+          // Fibrous edge: lower "alpha" (whiter / more translucent look via color)
+          newColors.push(0.92, 0.90, 0.88, 0.92, 0.90, 0.88);
         } else {
-          const tensionPull = progress * 0.015 * (isLeftHalf ? -1 : 1);
-          posAttr.setXYZ(r * (this.cols + 1) + c, bx + tensionPull, by, bz);
+          const sideSign = isLeftHalf ? -1 : 1;
+          newPositions.push(
+            bx + (isRowTorn ? sideSign * rowCurl * 0.6 : 0),
+            by - (isRowTorn ? rowCurl * 0.25 : 0),
+            bz + (isRowTorn ? rowCurl : 0)
+          );
+          newColors.push(1, 1, 1);
         }
       }
     }
-    posAttr.needsUpdate = true;
 
+    geo.setAttribute('position', new BufferAttribute(new Float32Array(newPositions), 3));
+    geo.setAttribute('color', new BufferAttribute(new Float32Array(newColors), 3));
+
+    // Rebuild indices (skip severed center column)
     const newIndices: number[] = [];
+    // Note: index math is approximate for the duplicated seam; refine in production for exact half ownership
     for (let r = 0; r < this.rows; r++) {
       const rowIsSevered = r < splitRowLimit;
       for (let c = 0; c < this.cols; c++) {
         if (rowIsSevered && c === centerCol) continue;
-        const a = r * (this.cols + 1) + c;
+        const a = r * vertsPerRow + c;
         const b = a + 1;
-        const d = (r + 1) * (this.cols + 1) + c;
+        const d = (r + 1) * vertsPerRow + c;
         const e = d + 1;
         newIndices.push(a, d, b);
         newIndices.push(b, d, e);
@@ -126,6 +158,8 @@ export class PaperTearSystem extends createSystem({
 
     geo.setIndex(newIndices);
     geo.computeVertexNormals();
+    geo.attributes.position.needsUpdate = true;
+    if (geo.attributes.color) geo.attributes.color.needsUpdate = true;
   }
 
   private detachHalves(paperEntity: any, leftHandle: any, rightHandle: any) {
@@ -133,7 +167,12 @@ export class PaperTearSystem extends createSystem({
     intactMesh.visible = false;
 
     const halfGeo = intactMesh.geometry.clone();
-    const mat = new MeshStandardMaterial({ color: 0xfdfbf7, side: DoubleSide, roughness: 0.85 });
+    const mat = new MeshStandardMaterial({
+      color: 0xfdfbf7,
+      side: DoubleSide,
+      roughness: 0.85,
+      vertexColors: true,
+    });
 
     const leftPiece = new Mesh(halfGeo, mat);
     leftPiece.position.set(-0.08, -0.12, 0);
