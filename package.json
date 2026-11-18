@@ -1,0 +1,17 @@
+{
+  "name": "iwsdk-paper-tear",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build"
+  },
+  "dependencies": {
+    "@iwsdk/core": "latest",
+    "three": "npm:super-three@0.185.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vite": "^5.0.0"
+  }
+}
