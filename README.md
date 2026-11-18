@@ -2,16 +2,11 @@
 
 Interactive paper tearing mechanic for **Meta Immersive Web SDK (IWSDK)** + Three.js.
 
-CPU-side progressive mesh splitting with:
-- Two-handed XR grab handles (`OneHandGrabbable`)
-- Progressive row-by-row tear with jagged seam and duplicated edge vertices
-- Vertex curling toward the hands
-- Procedural Web Audio fiber-snap synthesis
-- Haptic pulses on each new torn row (Quest controllers)
-- Vertex-color fibrous edge treatment
-- Clean half separation when fully torn
+**Live demo:** https://humank1nd.github.io/iwsdk-paper-tear/
 
-## Quick Start
+CPU-side progressive mesh splitting with two-handed XR grab handles, jagged seam, vertex curling, procedural rip audio, and haptic pulses.
+
+## Quick Start (local)
 
 ```bash
 git clone https://github.com/Humank1nd/iwsdk-paper-tear.git
@@ -20,29 +15,8 @@ npm install
 npm run dev
 ```
 
-Serve over HTTPS (Vite is configured for it). Open in Quest Browser or desktop Chrome with the Meta Immersive Web Emulator.
+## Deploy
 
-## Project Structure
+Pushes to `main` automatically deploy to GitHub Pages via Actions.
 
-```
-src/
-  components.ts          # TearablePaper + TearHandle
-  systems/PaperTearSystem.ts  # Tear logic, haptics, seam rebuild
-  audio/ProceduralRipAudio.ts
-  index.ts               # World setup
-vite.config.ts
-tsconfig.json
-index.html
-```
-
-## Controls
-
-- Pinch both red corner handles with Quest hands or controllers
-- Pull apart and downward to tear
-- Faster pulls increase crackle intensity and haptic strength
-
-## Extending to GPU
-
-The current solver is intentionally CPU so tearing, haptics, and audio stay simple. For large environmental cloth, swap the position update for a WebGPU compute Verlet/PBD pass and only read back the particles near the grab points.
-
-MIT License — use freely.
+MIT License.
